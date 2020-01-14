@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2019 the original author or authors.
+ * Copyright 2016-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -109,7 +109,7 @@ public class LocalTaskLauncher extends AbstractLocalDeployerSupport implements T
 
 			ProcessBuilder builder = buildProcessBuilder(request, args, Optional.empty(), taskLaunchId).inheritIO();
 
-			TaskInstance instance = new TaskInstance(builder, workDir, port);
+			TaskInstance instance = new TaskInstance(taskLaunchId, builder, workDir, port);
 			if (this.shouldInheritLogging(request)) {
 				instance.start(builder);
 				logger.info("launching task {}\n    Logs will be inherited.", taskLaunchId);
@@ -218,6 +218,16 @@ public class LocalTaskLauncher extends AbstractLocalDeployerSupport implements T
 		return runningExecutionCount;
 	}
 
+	@Override
+	public boolean isTaskRunning(String taskName) {
+		for (TaskInstance taskInstance: running.values()) {
+			if (taskInstance.getProcess().isAlive() && taskInstance.getTaskName().equals(taskName)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private boolean maxConcurrentExecutionsReached() {
 		return getRunningTaskExecutionCount() >= getMaximumConcurrentTasks();
 	}
@@ -253,9 +263,11 @@ public class LocalTaskLauncher extends AbstractLocalDeployerSupport implements T
 
 		private final URL baseUrl;
 
+		private final String taskName;
+
 		private boolean cancelled;
 
-		private TaskInstance(ProcessBuilder builder, Path workDir, int port) throws IOException {
+		private TaskInstance(String taskName, ProcessBuilder builder, Path workDir, int port) throws IOException {
 			builder.directory(workDir.toFile());
 			this.workDir = workDir;
 			this.baseUrl = new URL("http", Inet4Address.getLocalHost().getHostAddress(), port, "");
@@ -263,6 +275,7 @@ public class LocalTaskLauncher extends AbstractLocalDeployerSupport implements T
 				logger.debug("Local Task Launcher Commands: " + String.join(",", builder.command())
 						+ ", Environment: " + builder.environment());
 			}
+			this.taskName = taskName;
 		}
 
 		@Override
@@ -319,6 +332,10 @@ public class LocalTaskLauncher extends AbstractLocalDeployerSupport implements T
 			}
 		}
 
+		public String getTaskName() {
+			return this.taskName;
+		}
+
 		/**
 		 * Will start the process while redirecting 'out' and 'err' streams to the 'out' and 'err'
 		 * streams of this process.
@@ -354,6 +371,7 @@ public class LocalTaskLauncher extends AbstractLocalDeployerSupport implements T
 				result.put("stderr", stderr.getAbsolutePath());
 			}
 			result.put("url", baseUrl.toString());
+			result.put("taskName", taskName);
 			return result;
 		}
 	}
